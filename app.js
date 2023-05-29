@@ -89,7 +89,7 @@ async function main() {
             });
           });
 
-          console.log(result)
+          console.log(result);
 
           const pendingSrcMatches = result.match(/src: PendingPackets[\s\S]*?(?=dst:)/g);
           if (!pendingSrcMatches || pendingSrcMatches.length !== 1) {
@@ -103,7 +103,12 @@ async function main() {
             continue;
           }
 
-          const sequences = unreceivedPacketsMatches[0].match(/Sequence\((\d+)\)/g).map(m => Number(m.replace('Sequence(', '').replace(')', '')));
+          let sequences = unreceivedPacketsMatches[0].match(/Sequence\((\d+)\)/g);
+          if(sequences) {
+              sequences = sequences.map(m => Number(m.replace('Sequence(', '').replace(')', '')));
+          } else {
+              sequences = [];
+          }
 
           db.all(`SELECT sequence FROM pending_packets WHERE src_chain = ? AND src_channel = ? AND src_port = ? AND dst_chain = ?`, [chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id], (err, rows) => {
             if (err) {
@@ -111,12 +116,7 @@ async function main() {
               throw err;
             }
 
-            let sequences = unreceivedPacketsMatches[0].match(/Sequence\((\d+)\)/g);
-            if(sequences) {
-                sequences = sequences.map(m => Number(m.replace('Sequence(', '').replace(')', '')));
-            } else {
-                sequences = [];
-            }
+            const existingSequences = rows.map(row => row.sequence);
             console.log("Existing sequences:", existingSequences);
 
             // add new sequences
