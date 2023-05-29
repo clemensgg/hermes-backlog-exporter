@@ -8,7 +8,7 @@ const express = require('express');
 const config = require('./config.json');
 
 const app = express();
-const db = new sqlite3.Database('./hernes_backlog.db');
+const db = new sqlite3.Database('./hermes_backlog.db');
 const packetPendingGauge = new client.Gauge({
   name: 'packet_pending',
   help: 'Pending packets on a channel',
