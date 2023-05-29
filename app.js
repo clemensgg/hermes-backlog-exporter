@@ -66,39 +66,40 @@ async function main() {
     const configFilePath = config.configFilePath;
     const api = config.api;
   
-    const stateData = (await axios.get(`${api}/state`)).data;
-    if (!stateData) {
-      console.log(`error: no response from ${api}`);
-      process.exit(1);
-    }
+    const runTask = async () => {
+      console.log("Running task");
 
-    const packetData = stateData.result.workers.Packet;
-    const chains = Object.values(packetData)
-      .reduce((chains, packet) => {
-        const chain = chains.find(c => c.chain_id === packet.object.src_chain_id);
-        if (!chain) {
-          chains.push({
-            chain_id: packet.object.src_chain_id,
-            channels: [{
+      const stateData = (await axios.get(`${api}/state`)).data;
+      if (!stateData) {
+        console.log(`error: no response from ${api}`);
+        process.exit(1);
+      }
+
+      const packetData = stateData.result.workers.Packet;
+      const chains = Object.values(packetData)
+        .reduce((chains, packet) => {
+          const chain = chains.find(c => c.chain_id === packet.object.src_chain_id);
+          if (!chain) {
+            chains.push({
+              chain_id: packet.object.src_chain_id,
+              channels: [{
+                channel_id: packet.object.src_channel_id,
+                port_id: packet.object.src_port_id,
+                dst_chain_id: packet.object.dst_chain_id
+              }]
+            });
+          } else {
+            chain.channels.push({
               channel_id: packet.object.src_channel_id,
               port_id: packet.object.src_port_id,
               dst_chain_id: packet.object.dst_chain_id
-            }]
-          });
-        } else {
-          chain.channels.push({
-            channel_id: packet.object.src_channel_id,
-            port_id: packet.object.src_port_id,
-            dst_chain_id: packet.object.dst_chain_id
-          });
-        }
-        return chains;
-      }, []);
+            });
+          }
+          return chains;
+        }, []);
 
-    console.log("Found chains:", JSON.stringify(chains));
-    
-    const runTask = async () => {
-      console.log("Running task");
+      console.log("Found chains:", JSON.stringify(chains));
+
       for (const chain of chains) {
         for (const channel of chain.channels) {
           console.log(`Processing chain: ${chain.chain_id}, channel: ${channel.channel_id}`);
@@ -190,8 +191,8 @@ async function main() {
     // Run the task immediately
     await runTask();
 
-    // Run the task every minute
-    setInterval(runTask, 60000);
+    // Run the task every 10 s
+    setInterval(runTask, 10000);
  
   } catch (error) {
     console.error("Error in main function:", error);
