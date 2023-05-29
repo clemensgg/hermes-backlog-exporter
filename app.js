@@ -38,6 +38,14 @@ const packetPendingGauge = new client.Gauge({
 register.registerMetric(packetPendingGauge);
 packetPendingGauge.set(0);
 
+const sequencePendingGauge = new client.Gauge({
+  name: 'sequence_pending',
+  help: 'Pending status of a sequence',
+  labelNames: ['sequence', 'src_chain', 'src_channel', 'src_port', 'dst_chain']
+});
+register.registerMetric(sequencePendingGauge);
+
+
 app.get('/metrics', async (req, res) => {
   try {
     console.log("Handling request for /metrics");
@@ -152,6 +160,7 @@ async function main() {
                     console.error("Database insert error:", err);
                     throw err;
                   }
+                  sequencePendingGauge.labels(sequence, chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id).set(1);
                   packetPendingGauge.labels(chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id).inc();
                   console.log("Inserted gauge for sequence:", sequence);
                 });
@@ -167,6 +176,7 @@ async function main() {
                     console.error("Database delete error:", err);
                     throw err;
                   }
+                  sequencePendingGauge.labels(existingSequence, chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id).set(0);
                   packetPendingGauge.labels(chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id).dec();
                   console.log("Decreased gauge for sequence:", existingSequence);
                 });
