@@ -1,4 +1,4 @@
-## Hermes Packet Monitoring
+# Hermes Packet Monitoring
 
 This is a pretty dirty solution to visualize pending IBC packets using a [hermes](https://github.com/informalsystems/hermes) IBC relayer.
 
