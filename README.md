@@ -5,7 +5,7 @@ This is a pretty dirty solution to visualize pending IBC packets using a [hermes
 ### Prerequisites
 
 - Node.js (version 14 or above is recommended)
-- npm (usually comes with Node.js)
+- npm
 
 ### Installing
 
@@ -13,7 +13,7 @@ Clone this repository, install dependencies:
 
 ```bash
 git clone https://github.com/clemensgg/hermes-backlog-exporter.git
-cd your-repository-name
+cd hermes-backlog-exporter
 npm install
 ```
 
