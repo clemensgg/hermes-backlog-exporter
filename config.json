@@ -1,0 +1,4 @@
+{
+  "configFilePath": "/home/relay/.hermes/config-neutron.toml",
+  "api": "http://localhost:4000"
+}
