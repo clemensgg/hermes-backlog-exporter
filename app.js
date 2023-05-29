@@ -98,17 +98,18 @@ async function main() {
           }
 
           const unreceivedPacketsMatches = pendingSrcMatches[0].match(/unreceived_packets: \[([\s\S]*?)\],/g);
-          if (!unreceivedPacketsMatches || unreceivedPacketsMatches.length !== 1) {
-            console.log("error: could not extract unreceived packets");
-            continue;
+          const unreceivedAcksMatches = pendingSrcMatches[0].match(/unreceived_acks: \[([\s\S]*?)\],/g);
+
+          let sequences = [];
+          if(unreceivedPacketsMatches && unreceivedPacketsMatches.length !== 1) {
+            sequences = [...sequences, ...unreceivedPacketsMatches[0].match(/Sequence\((\d+)\)/g)];
+          }
+          if(unreceivedAcksMatches && unreceivedAcksMatches.length !== 1) {
+            sequences = [...sequences, ...unreceivedAcksMatches[0].match(/Sequence\((\d+)\)/g)];
           }
 
-          let sequences = unreceivedPacketsMatches[0].match(/Sequence\((\d+)\)/g);
-          if(sequences) {
-              sequences = sequences.map(m => Number(m.replace('Sequence(', '').replace(')', '')));
-          } else {
-              sequences = [];
-          }
+          sequences = sequences.map(m => Number(m.replace('Sequence(', '').replace(')', '')));
+
 
           db.all(`SELECT sequence FROM pending_packets WHERE src_chain = ? AND src_channel = ? AND src_port = ? AND dst_chain = ?`, [chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id], (err, rows) => {
             if (err) {
@@ -128,6 +129,7 @@ async function main() {
                     console.error("Database insert error:", err);
                     throw err;
                   }
+                  packetPendingGauge.labels(chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id).inc();
                   console.log("Inserted sequence:", sequence);
                 });
               }
