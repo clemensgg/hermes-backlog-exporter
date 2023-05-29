@@ -4,19 +4,38 @@ const moment = require('moment');
 const client = require('prom-client');
 const sqlite3 = require('sqlite3').verbose();
 const express = require('express');
+const fs = require('fs');
 
 const config = require('./config.json');
 
 const register = new client.Registry();
 
 const app = express();
-const db = new sqlite3.Database('./hermes_backlog.db');
+const db = new sqlite3.Database(config.dbPath);
+
+fs.unlink(path, (err) => {
+  if (err) {
+      console.error("An error occurred:", err);
+  }
+  console.log('Database file deleted successfully.');
+
+  const db = new sqlite3.Database(path);
+
+  db.run('CREATE TABLE IF NOT EXISTS pending_packets (sequence INTEGER, timestamp TEXT, src_chain TEXT, src_channel TEXT, src_port TEXT, dst_chain TEXT)', (err) => {
+    if (err) {
+      console.error("Error while creating database:", err.message);
+      return;
+    }
+    console.log("Database created successfully");
+  });
+});
+
 const packetPendingGauge = new client.Gauge({
   name: 'packet_pending',
   help: 'Pending packets on a channel',
   labelNames: ['src_chain', 'src_channel', 'src_port', 'dst_chain']
 });
-
+register.registerMetric(packetPendingGauge);
 packetPendingGauge.set(0);
 
 app.get('/metrics', async (req, res) => {
@@ -32,14 +51,6 @@ app.get('/metrics', async (req, res) => {
 });
 
 app.listen(config.port, () => console.log('Server listening on port ' + config.port));
-
-db.run('CREATE TABLE IF NOT EXISTS pending_packets (sequence INTEGER, timestamp TEXT, src_chain TEXT, src_channel TEXT, src_port TEXT, dst_chain TEXT)', (err) => {
-  if (err) {
-    console.error("Error while creating database:", err.message);
-    return;
-  }
-  console.log("Database created successfully");
-});
 
 async function main() {
   try {
@@ -103,8 +114,6 @@ async function main() {
             });
           });
 
-          console.log(result);
-
           let sequences = [];
           if (result && result.status === 'success') {
             const { dst, src } = result.result;
@@ -120,7 +129,6 @@ async function main() {
               sequences.push(ack);
             }
 
-            console.log('Sequences:', sequences);
           } else {
             console.log('Error: Could not extract pending packets');
           }
