@@ -89,6 +89,8 @@ async function main() {
             });
           });
 
+          console.log(result)
+
           const pendingSrcMatches = result.match(/src: PendingPackets[\s\S]*?(?=dst:)/g);
           if (!pendingSrcMatches || pendingSrcMatches.length !== 1) {
             console.log("error: could not extract pending src packets");
@@ -109,7 +111,12 @@ async function main() {
               throw err;
             }
 
-            const existingSequences = rows.map(row => row.sequence);
+            let sequences = unreceivedPacketsMatches[0].match(/Sequence\((\d+)\)/g);
+            if(sequences) {
+                sequences = sequences.map(m => Number(m.replace('Sequence(', '').replace(')', '')));
+            } else {
+                sequences = [];
+            }
             console.log("Existing sequences:", existingSequences);
 
             // add new sequences
