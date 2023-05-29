@@ -13,13 +13,13 @@ const register = new client.Registry();
 const app = express();
 const db = new sqlite3.Database(config.dbPath);
 
-fs.unlink(path, (err) => {
+fs.unlink(config.dbPath, (err) => {
   if (err) {
       console.error("An error occurred:", err);
   }
   console.log('Database file deleted successfully.');
 
-  const db = new sqlite3.Database(path);
+  const db = new sqlite3.Database(config.dbPath);
 
   db.run('CREATE TABLE IF NOT EXISTS pending_packets (sequence INTEGER, timestamp TEXT, src_chain TEXT, src_channel TEXT, src_port TEXT, dst_chain TEXT)', (err) => {
     if (err) {
