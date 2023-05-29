@@ -42,3 +42,7 @@ The following metrics are available:
 
 - `packet_pending`: Number of total pending packets on a channel.
 - `sequence_pending`: Pending status of a sequence.
+
+### License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE file](./LICENSE.md) for details.
