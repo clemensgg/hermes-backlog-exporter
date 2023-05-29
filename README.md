@@ -6,6 +6,7 @@ This is a pretty dirty solution to visualize pending IBC packets using a [hermes
 
 - Node.js (version 14 or above is recommended)
 - npm
+- [Hermes](https://github.com/informalsystems/hermes) IBC relayer by [Informal Systems](https://github.com/informalsystems)
 
 ### Installing
 
@@ -45,4 +46,4 @@ The following metrics are available:
 
 ### License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE file](./LICENSE.md) for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](./LICENSE) for details.
