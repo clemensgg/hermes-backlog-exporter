@@ -17,6 +17,8 @@ const packetPendingGauge = new client.Gauge({
   labelNames: ['src_chain', 'src_channel', 'src_port', 'dst_chain']
 });
 
+packetPendingGauge.set(0);
+
 app.get('/metrics', async (req, res) => {
   try {
     console.log("Handling request for /metrics");
@@ -81,34 +83,47 @@ async function main() {
       for (const chain of chains) {
         for (const channel of chain.channels) {
           console.log(`Processing chain: ${chain.chain_id}, channel: ${channel.channel_id}`);
-          const hermesCommand = `hermes --config ${configFilePath} query packet pending --chain ${chain.chain_id} --port ${channel.port_id} --channel ${channel.channel_id}`;
+          const hermesCommand = `hermes --json --config ${configFilePath} query packet pending --chain ${chain.chain_id} --port ${channel.port_id} --channel ${channel.channel_id}`;
+          const { exec } = require('child_process');
+
           const result = await new Promise((resolve, reject) => {
-            exec(hermesCommand, (err, data) => {
-              if (err) reject(err);
-              else resolve(data);
+            exec(hermesCommand, (err, stdout) => {
+              if (err) {
+                reject(err);
+              } else {
+                const resultLine = stdout.match(/{"result":{[\s\S]*?},"status":"success"}/);
+                
+                try {
+                  const jsonOutput = JSON.parse(resultLine[0]);
+                  resolve(jsonOutput);
+                } catch (error) {
+                  reject(error);
+                }
+              }
             });
           });
 
           console.log(result);
 
-          const pendingSrcMatches = result.match(/src: PendingPackets[\s\S]*?(?=dst:)/g);
-          if (!pendingSrcMatches || pendingSrcMatches.length !== 1) {
-            console.log("error: could not extract pending src packets");
-            continue;
-          }
-
-          const unreceivedPacketsMatches = pendingSrcMatches[0].match(/unreceived_packets: \[([\s\S]*?)\],/g);
-          const unreceivedAcksMatches = pendingSrcMatches[0].match(/unreceived_acks: \[([\s\S]*?)\],/g);
-
           let sequences = [];
-          if(unreceivedPacketsMatches && unreceivedPacketsMatches.length !== 1) {
-            sequences = [...sequences, ...unreceivedPacketsMatches[0].match(/Sequence\((\d+)\)/g)];
-          }
-          if(unreceivedAcksMatches && unreceivedAcksMatches.length !== 1) {
-            sequences = [...sequences, ...unreceivedAcksMatches[0].match(/Sequence\((\d+)\)/g)];
-          }
+          if (result && result.status === 'success') {
+            const { dst, src } = result.result;
 
-          sequences = sequences.map(m => Number(m.replace('Sequence(', '').replace(')', '')));
+            const unreceivedPackets = dst.unreceived_packets.concat(src.unreceived_packets);
+            const unreceivedAcks = dst.unreceived_acks.concat(src.unreceived_acks);
+
+            for (const packet of unreceivedPackets) {
+              sequences.push(packet);
+            }
+
+            for (const ack of unreceivedAcks) {
+              sequences.push(ack);
+            }
+
+            console.log('Sequences:', sequences);
+          } else {
+            console.log('Error: Could not extract pending packets');
+          }
 
 
           db.all(`SELECT sequence FROM pending_packets WHERE src_chain = ? AND src_channel = ? AND src_port = ? AND dst_chain = ?`, [chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id], (err, rows) => {
@@ -130,7 +145,7 @@ async function main() {
                     throw err;
                   }
                   packetPendingGauge.labels(chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id).inc();
-                  console.log("Inserted sequence:", sequence);
+                  console.log("Inserted gauge for sequence:", sequence);
                 });
               }
             }
