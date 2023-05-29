@@ -62,12 +62,10 @@ app.listen(config.port, () => console.log('Server listening on port ' + config.p
 
 async function main() {
   try {
-    console.log("Starting main function");
     const configFilePath = config.configFilePath;
     const api = config.api;
   
     const runTask = async () => {
-      console.log("Running task");
 
       const stateData = (await axios.get(`${api}/state`)).data;
       if (!stateData) {
@@ -102,7 +100,6 @@ async function main() {
 
       for (const chain of chains) {
         for (const channel of chain.channels) {
-          console.log(`Processing chain: ${chain.chain_id}, channel: ${channel.channel_id}`);
           const hermesCommand = `hermes --json --config ${configFilePath} query packet pending --chain ${chain.chain_id} --port ${channel.port_id} --channel ${channel.channel_id}`;
           const { exec } = require('child_process');
 
@@ -150,7 +147,6 @@ async function main() {
             }
 
             const existingSequences = rows.map(row => row.sequence);
-            console.log("Existing sequences:", existingSequences);
 
             // add new sequences
             for (const sequence of sequences) {
@@ -163,7 +159,7 @@ async function main() {
                   }
                   sequencePendingGauge.labels(sequence, chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id).set(1);
                   packetPendingGauge.labels(chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id).inc();
-                  console.log("Inserted gauge for sequence:", sequence);
+                  console.log("Increased gauge for sequence:", sequence);
                 });
               }
             }
@@ -177,7 +173,7 @@ async function main() {
                     console.error("Database delete error:", err);
                     throw err;
                   }
-                  sequencePendingGauge.labels(existingSequence, chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id).set(0);
+                  sequencePendingGauge.remove(existingSequence, chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id);
                   packetPendingGauge.labels(chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id).dec();
                   console.log("Decreased gauge for sequence:", existingSequence);
                 });
