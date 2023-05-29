@@ -15,12 +15,17 @@ const packetPendingGauge = new client.Gauge({
   labelNames: ['src_chain', 'src_channel', 'src_port', 'dst_chain']
 });
 
-app.get('/metrics', (req, res) => {
-  res.set('Content-Type', client.register.contentType);
-  res.end(client.register.metrics());
+app.get('/metrics', async (req, res) => {
+  try {
+    const metrics = await register.metrics();
+    res.set('Content-Type', register.contentType);
+    res.end(metrics);
+  } catch (err) {
+    res.status(500).end(err);
+  }
 });
 
-app.listen(config.port, () => console.log('Server listening on port 3000'));
+app.listen(config.port, () => console.log('Server listening on port ' + config.port));
 
 db.run('CREATE TABLE IF NOT EXISTS pending_packets (sequence INTEGER, timestamp TEXT, src_chain TEXT, src_channel TEXT, src_port TEXT, dst_chain TEXT)', (err) => {
   if (err) {
