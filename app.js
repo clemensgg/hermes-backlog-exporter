@@ -36,7 +36,6 @@ const packetPendingGauge = new client.Gauge({
   labelNames: ['src_chain', 'src_channel', 'src_port', 'dst_chain']
 });
 register.registerMetric(packetPendingGauge);
-packetPendingGauge.set(0);
 
 const sequencePendingGauge = new client.Gauge({
   name: 'sequence_pending',
