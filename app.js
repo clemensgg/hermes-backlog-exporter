@@ -21,7 +21,7 @@ fs.unlink(config.dbPath, (err) => {
 
   const db = new sqlite3.Database(config.dbPath);
 
-  db.run('CREATE TABLE IF NOT EXISTS pending_packets (sequence INTEGER, timestamp TEXT, src_chain TEXT, src_channel TEXT, src_port TEXT, dst_chain TEXT)', (err) => {
+  db.run('CREATE TABLE IF NOT EXISTS pending_packets (sequence INTEGER, timestamp TEXT, src_chain TEXT, src_channel TEXT, src_port TEXT, dst_chain TEXT, packet_type TEXT)', (err) => {
     if (err) {
       console.error("Error while creating database:", err.message);
       return;
@@ -33,16 +33,23 @@ fs.unlink(config.dbPath, (err) => {
 const packetPendingGauge = new client.Gauge({
   name: 'packet_pending',
   help: 'Pending packets on a channel',
-  labelNames: ['src_chain', 'src_channel', 'src_port', 'dst_chain']
+  labelNames: ['src_chain', 'src_channel', 'src_port', 'dst_chain', 'packet_type']
 });
 register.registerMetric(packetPendingGauge);
 
 const sequencePendingGauge = new client.Gauge({
   name: 'sequence_pending',
   help: 'Pending status of a sequence',
-  labelNames: ['sequence', 'src_chain', 'src_channel', 'src_port', 'dst_chain']
+  labelNames: ['sequence', 'src_chain', 'src_channel', 'src_port', 'dst_chain', 'packet_type']
 });
 register.registerMetric(sequencePendingGauge);
+
+const oldestSequenceTimestampGauge = new client.Gauge({
+  name: 'timestamp_oldest_pending_sequence',
+  help: 'Timestamp of oldest pending sequence',
+  labelNames: ['src_chain', 'src_channel', 'src_port', 'dst_chain', 'packet_type']
+});
+register.registerMetric(oldestSequenceTimestampGauge);
 
 
 app.get('/metrics', async (req, res) => {
@@ -122,16 +129,16 @@ async function main() {
           let sequences = [];
           if (result && result.status === 'success') {
             const { dst, src } = result.result;
-
+          
             const unreceivedPackets = dst.unreceived_packets.concat(src.unreceived_packets);
             const unreceivedAcks = dst.unreceived_acks.concat(src.unreceived_acks);
-
+          
             for (const packet of unreceivedPackets) {
-              sequences.push(packet);
+              sequences.push({ sequence: packet, packet_type: 'packet' });
             }
-
+          
             for (const ack of unreceivedAcks) {
-              sequences.push(ack);
+              sequences.push({ sequence: ack, packet_type: 'ack' });
             }
 
           } else {
@@ -139,42 +146,62 @@ async function main() {
           }
 
 
-          db.all(`SELECT sequence FROM pending_packets WHERE src_chain = ? AND src_channel = ? AND src_port = ? AND dst_chain = ?`, [chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id], (err, rows) => {
+          // Fetch sequences from database, including the packet_type
+          db.all(`SELECT sequence, packet_type FROM pending_packets WHERE src_chain = ? AND src_channel = ? AND src_port = ? AND dst_chain = ?`, 
+          [chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id], (err, rows) => {
             if (err) {
               console.error("Database select error:", err);
               throw err;
             }
 
-            const existingSequences = rows.map(row => row.sequence);
+            const existingSequences = rows.map(row => ({ sequence: row.sequence, packet_type: row.packet_type }));
 
-            // add new sequences
-            for (const sequence of sequences) {
-              if (!existingSequences.includes(sequence)) {
-                db.run(`INSERT INTO pending_packets (sequence, timestamp, src_chain, src_channel, src_port, dst_chain) VALUES (?, ?, ?, ?, ?, ?)`,
-                [sequence, moment().format('YYYY-MM-DD HH:mm:ss'), chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id], (err) => {
+            // Add new sequences
+            for (const sequenceObj of sequences) {
+              if (!existingSequences.find(existSeq => existSeq.sequence === sequenceObj.sequence && existSeq.packet_type === sequenceObj.packet_type)) {
+                db.run(`INSERT INTO pending_packets (sequence, timestamp, src_chain, src_channel, src_port, dst_chain, packet_type) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [sequenceObj.sequence, moment().format('YYYY-MM-DD HH:mm:ss'), chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id, sequenceObj.packet_type], (err) => {
                   if (err) {
                     console.error("Database insert error:", err);
                     throw err;
                   }
-                  sequencePendingGauge.labels(sequence, chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id).set(1);
-                  packetPendingGauge.labels(chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id).inc();
-                  console.log("Increased gauge for sequence:", sequence);
+                  sequencePendingGauge.labels(sequenceObj.sequence, chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id, sequenceObj.packet_type).set(1);
+                  packetPendingGauge.labels(chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id, sequenceObj.packet_type).inc();
+                  console.log("Increased gauge for sequence:", sequenceObj.sequence);
+
+                  // Update timestamp gauge for oldest sequence
+                  db.get('SELECT MIN(timestamp) as oldestTimestamp FROM pending_packets', (err, row) => {
+                    if (err) {
+                      console.error("Database select error:", err);
+                      throw err;
+                    }
+                    oldestSequenceTimestampGauge.labels(chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id, sequenceObj.packet_type).set(new Date(row.oldestTimestamp).getTime());
+                  });
                 });
               }
             }
 
-            // remove handled sequences and decrease gauge
+            // Remove handled sequences and decrease gauge
             for (const existingSequence of existingSequences) {
-              if (!sequences.includes(existingSequence)) {
-                db.run(`DELETE FROM pending_packets WHERE sequence = ? AND src_chain = ? AND src_channel = ? AND src_port = ? AND dst_chain = ?`,
-                [existingSequence, chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id], (err) => {
+              if (!sequences.find(seq => seq.sequence === existingSequence.sequence && seq.packet_type === existingSequence.packet_type)) {
+                db.run(`DELETE FROM pending_packets WHERE sequence = ? AND src_chain = ? AND src_channel = ? AND src_port = ? AND dst_chain = ? AND packet_type = ?`,
+                [existingSequence.sequence, chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id, existingSequence.packet_type], (err) => {
                   if (err) {
                     console.error("Database delete error:", err);
                     throw err;
                   }
-                  sequencePendingGauge.remove(existingSequence, chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id);
-                  packetPendingGauge.labels(chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id).dec();
-                  console.log("Decreased gauge for sequence:", existingSequence);
+                  sequencePendingGauge.remove(existingSequence.sequence, chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id, existingSequence.packet_type);
+                  packetPendingGauge.labels(chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id, existingSequence.packet_type).dec();
+                  console.log("Decreased gauge for sequence:", existingSequence.sequence);
+
+                  // Update timestamp gauge for oldest sequence
+                  db.get('SELECT MIN(timestamp) as oldestTimestamp FROM pending_packets', (err, row) => {
+                    if (err) {
+                      console.error("Database select error:", err);
+                      throw err;
+                    }
+                    oldestSequenceTimestampGauge.labels(chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id, existingSequence.packet_type).set(new Date(row.oldestTimestamp).getTime());
+                  });
                 });
               }
             }

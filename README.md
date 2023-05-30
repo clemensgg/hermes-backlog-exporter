@@ -43,6 +43,7 @@ The following metrics are available:
 
 - `packet_pending`: Number of total pending packets on a channel.
 - `sequence_pending`: Pending status of a sequence.
+- `timestamp_oldest_pending_sequence`: Timestamp of the oldest pending sequence.
 
 ### License
 
