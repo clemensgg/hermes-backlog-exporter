@@ -200,7 +200,11 @@ async function main() {
                       console.error("Database select error:", err);
                       throw err;
                     }
-                    oldestSequenceTimestampGauge.labels(chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id, existingSequence.packet_type).set(new Date(row.oldestTimestamp).getTime());
+                    if (row.oldestTimestamp) {
+                      oldestSequenceTimestampGauge.labels(chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id, existingSequence.packet_type).set(new Date(row.oldestTimestamp).getTime());
+                    } else {
+                      oldestSequenceTimestampGauge.labels(chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id, existingSequence.packet_type).set(0);
+                    }
                   });
                 });
               }
