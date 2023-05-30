@@ -195,7 +195,8 @@ async function main() {
                   console.log("Decreased gauge for sequence:", existingSequence.sequence);
 
                   // Update timestamp gauge for oldest sequence
-                  db.get('SELECT MIN(timestamp) as oldestTimestamp FROM pending_packets', (err, row) => {
+                  db.get('SELECT MIN(timestamp) as oldestTimestamp FROM pending_packets WHERE src_chain = ? AND src_channel = ? AND src_port = ? AND dst_chain = ? AND packet_type = ?', 
+                  [chain.chain_id, channel.channel_id, channel.port_id, channel.dst_chain_id, existingSequence.packet_type], (err, row) => {
                     if (err) {
                       console.error("Database select error:", err);
                       throw err;
